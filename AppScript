@@ -1,0 +1,607 @@
+// ============================================
+// ITI QUIZ MAKER - SIDEBAR VERSION
+// ============================================
+
+function onOpen() {
+  SpreadsheetApp.getUi()
+    .createMenu('🎓 ITI Quiz Maker')
+    .addItem('🚀 Create New Quiz', 'openQuizSidebar')
+    .addSeparator()
+    .addItem('📋 View Quiz Log', 'viewLog')
+    .addItem('⚙️ Setup Log Sheet', 'setupLogSheet')
+    .addToUi();
+}
+
+function openQuizSidebar() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var allSheets = spreadsheet.getSheets();
+  var chapterSheets = allSheets
+    .map(s => s.getName())
+    .filter(name => name !== '📋 QUIZ LOG' && name !== 'CONFIG');
+
+  // Load all questions from all chapters
+  var chaptersData = {};
+  chapterSheets.forEach(function(chapterName) {
+    var sheet = spreadsheet.getSheetByName(chapterName);
+    if (!sheet) return;
+    var data = sheet.getDataRange().getValues();
+    var rows = data.slice(1).filter(row => row[0]);
+    chaptersData[chapterName] = rows.map(function(row, i) {
+      return {
+        index: i,
+        question: row[0].toString(),
+        optA: row[1].toString(),
+        optB: row[2].toString(),
+        optC: row[3].toString(),
+        optD: row[4].toString(),
+        answer: row[5].toString().trim().toUpperCase(),
+        difficulty: row[6] ? row[6].toString().toLowerCase() : 'medium',
+        points: parseInt(row[7]) || 1
+      };
+    });
+  });
+
+  // Build the sidebar HTML
+  var html = buildSidebarHtml(chapterSheets, chaptersData);
+  var htmlOutput = HtmlService.createHtmlOutput(html)
+    .setTitle('🎓 ITI Quiz Maker')
+    .setWidth(400);
+
+  SpreadsheetApp.getUi().showSidebar(htmlOutput);
+}
+
+function buildSidebarHtml(chapters, chaptersData) {
+  var chaptersJson = JSON.stringify(chaptersData);
+  var chaptersListJson = JSON.stringify(chapters);
+
+  return `
+<!DOCTYPE html>
+<html>
+<head>
+<style>
+  * { box-sizing: border-box; margin: 0; padding: 0; }
+  body { font-family: Arial, sans-serif; font-size: 13px; background: #f8f9fa; color: #333; }
+
+  .header {
+    background: #1a73e8;
+    color: white;
+    padding: 14px 16px;
+    font-size: 16px;
+    font-weight: bold;
+    position: sticky;
+    top: 0;
+    z-index: 100;
+  }
+
+  .section {
+    background: white;
+    margin: 10px 8px;
+    border-radius: 8px;
+    padding: 12px;
+    box-shadow: 0 1px 3px rgba(0,0,0,0.1);
+  }
+
+  .section-title {
+    font-weight: bold;
+    color: #1a73e8;
+    font-size: 12px;
+    text-transform: uppercase;
+    margin-bottom: 10px;
+    letter-spacing: 0.5px;
+  }
+
+  .chapter-checkbox {
+    display: flex;
+    align-items: center;
+    padding: 6px 4px;
+    border-radius: 4px;
+    cursor: pointer;
+    transition: background 0.15s;
+  }
+  .chapter-checkbox:hover { background: #f0f4ff; }
+  .chapter-checkbox input { margin-right: 8px; width: 16px; height: 16px; cursor: pointer; }
+
+  .radio-group { display: flex; gap: 8px; flex-wrap: wrap; }
+  .radio-btn {
+    display: flex;
+    align-items: center;
+    padding: 6px 10px;
+    border: 2px solid #ddd;
+    border-radius: 20px;
+    cursor: pointer;
+    transition: all 0.15s;
+    font-size: 12px;
+  }
+  .radio-btn:hover { border-color: #1a73e8; }
+  .radio-btn input { margin-right: 5px; }
+  .radio-btn.selected { border-color: #1a73e8; background: #e8f0fe; color: #1a73e8; font-weight: bold; }
+
+  .mode-section { display: flex; gap: 8px; }
+  .mode-btn {
+    flex: 1;
+    padding: 10px;
+    border: 2px solid #ddd;
+    border-radius: 8px;
+    cursor: pointer;
+    text-align: center;
+    transition: all 0.15s;
+    background: white;
+  }
+  .mode-btn:hover { border-color: #1a73e8; }
+  .mode-btn.active { border-color: #1a73e8; background: #e8f0fe; color: #1a73e8; font-weight: bold; }
+  .mode-btn .icon { font-size: 20px; display: block; margin-bottom: 4px; }
+
+  #randomCount {
+    width: 100%;
+    padding: 8px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    font-size: 14px;
+    margin-top: 8px;
+  }
+  #randomCount:focus { border-color: #1a73e8; outline: none; }
+
+  .question-item {
+    display: flex;
+    align-items: flex-start;
+    padding: 8px 4px;
+    border-bottom: 1px solid #f0f0f0;
+    cursor: pointer;
+  }
+  .question-item:hover { background: #f8f9ff; }
+  .question-item input[type=checkbox] {
+    margin-right: 8px;
+    margin-top: 2px;
+    width: 16px;
+    height: 16px;
+    flex-shrink: 0;
+    cursor: pointer;
+  }
+  .question-text { font-size: 12px; line-height: 1.4; color: #333; }
+  .question-meta { font-size: 10px; color: #888; margin-top: 2px; }
+
+  .chapter-header {
+    background: #e8f0fe;
+    color: #1a73e8;
+    font-weight: bold;
+    padding: 8px 10px;
+    border-radius: 6px;
+    margin: 10px 0 6px 0;
+    font-size: 12px;
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+  }
+
+  .select-all-btn {
+    font-size: 10px;
+    background: white;
+    border: 1px solid #1a73e8;
+    color: #1a73e8;
+    padding: 2px 8px;
+    border-radius: 10px;
+    cursor: pointer;
+  }
+  .select-all-btn:hover { background: #1a73e8; color: white; }
+
+  input[type=text] {
+    width: 100%;
+    padding: 8px 10px;
+    border: 2px solid #ddd;
+    border-radius: 6px;
+    font-size: 13px;
+    margin-top: 4px;
+  }
+  input[type=text]:focus { border-color: #1a73e8; outline: none; }
+
+  label { font-size: 12px; color: #555; display: block; margin-top: 8px; margin-bottom: 2px; }
+
+  #createBtn {
+    width: calc(100% - 16px);
+    margin: 10px 8px 20px 8px;
+    padding: 14px;
+    background: #1a73e8;
+    color: white;
+    border: none;
+    border-radius: 8px;
+    font-size: 15px;
+    font-weight: bold;
+    cursor: pointer;
+    transition: background 0.2s;
+  }
+  #createBtn:hover { background: #1557b0; }
+  #createBtn:disabled { background: #aaa; cursor: not-allowed; }
+
+  #status {
+    margin: 0 8px 10px 8px;
+    padding: 10px;
+    border-radius: 6px;
+    display: none;
+    font-size: 12px;
+  }
+  #status.success { background: #e6f4ea; color: #2d7d32; border: 1px solid #a8d5b5; }
+  #status.error { background: #fce8e6; color: #c62828; border: 1px solid #f5c6c6; }
+  #status.loading { background: #e8f0fe; color: #1a73e8; border: 1px solid #aecbfa; }
+
+  #questionPool { display: none; }
+  #randomSection { display: none; }
+
+  .badge {
+    background: #1a73e8;
+    color: white;
+    border-radius: 10px;
+    padding: 1px 7px;
+    font-size: 10px;
+    margin-left: 5px;
+  }
+
+  .diff-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 9px;
+    margin-left: 4px;
+    font-weight: bold;
+  }
+  .diff-easy { background: #e6f4ea; color: #2d7d32; }
+  .diff-medium { background: #fff8e1; color: #f57f17; }
+  .diff-hard { background: #fce8e6; color: #c62828; }
+</style>
+</head>
+<body>
+
+<div class="header">🎓 ITI Quiz Maker</div>
+
+<!-- STEP 1: CHAPTERS -->
+<div class="section">
+  <div class="section-title">📚 Step 1 — Select Chapters</div>
+  <div id="chapterList"></div>
+</div>
+
+<!-- STEP 2: DIFFICULTY -->
+<div class="section">
+  <div class="section-title">🎯 Step 2 — Difficulty</div>
+  <div class="radio-group" id="diffGroup">
+    <label class="radio-btn selected"><input type="radio" name="diff" value="all" checked> All</label>
+    <label class="radio-btn"><input type="radio" name="diff" value="easy"> Easy</label>
+    <label class="radio-btn"><input type="radio" name="diff" value="medium"> Medium</label>
+    <label class="radio-btn"><input type="radio" name="diff" value="hard"> Hard</label>
+  </div>
+</div>
+
+<!-- STEP 3: MODE -->
+<div class="section">
+  <div class="section-title">⚙️ Step 3 — Selection Mode</div>
+  <div class="mode-section">
+    <div class="mode-btn active" id="modeRandom" onclick="setMode('random')">
+      <span class="icon">🎲</span>Random
+    </div>
+    <div class="mode-btn" id="modeCustom" onclick="setMode('custom')">
+      <span class="icon">☑️</span>Custom
+    </div>
+  </div>
+
+  <div id="randomSection">
+    <input type="number" id="randomCount" placeholder="How many questions? (0 = all)" min="1" />
+  </div>
+
+  <div id="questionPool">
+    <div style="margin-top:10px; color:#555; font-size:12px;">Select questions below 👇</div>
+  </div>
+</div>
+
+<!-- QUESTION LIST (for custom) -->
+<div class="section" id="questionListSection" style="display:none;">
+  <div class="section-title">
+    ✅ Select Questions
+    <span id="selectedCount" class="badge">0 selected</span>
+  </div>
+  <div id="questionList"></div>
+</div>
+
+<!-- STEP 4: DETAILS -->
+<div class="section">
+  <div class="section-title">📝 Step 4 — Quiz Details</div>
+  <label>Quiz Title</label>
+  <input type="text" id="quizTitle" placeholder="e.g. Chapter 1 & 2 Test" />
+  <label>Your Name (Teacher)</label>
+  <input type="text" id="teacherName" placeholder="Enter your name" />
+</div>
+
+<div id="status"></div>
+<button id="createBtn" onclick="createQuiz()">🚀 Create Quiz</button>
+
+<script>
+  var allData = ${chaptersJson};
+  var chapterNames = ${chaptersListJson};
+  var currentMode = 'random';
+  var selectedQuestions = {};
+
+  // BUILD CHAPTER CHECKBOXES
+  function buildChapterList() {
+    var container = document.getElementById('chapterList');
+    chapterNames.forEach(function(name) {
+      var count = allData[name] ? allData[name].length : 0;
+      var div = document.createElement('label');
+      div.className = 'chapter-checkbox';
+      div.innerHTML = '<input type="checkbox" class="chap-cb" value="' + name + '" onchange="onChapterChange()"> ' +
+        name + ' <span class="badge">' + count + 'Q</span>';
+      container.appendChild(div);
+    });
+  }
+
+  // DIFFICULTY RADIO STYLING
+  document.querySelectorAll('input[name="diff"]').forEach(function(radio) {
+    radio.addEventListener('change', function() {
+      document.querySelectorAll('.radio-btn').forEach(el => el.classList.remove('selected'));
+      this.parentElement.classList.add('selected');
+      if (currentMode === 'custom') refreshQuestionList();
+    });
+  });
+
+  // MODE TOGGLE
+  function setMode(mode) {
+    currentMode = mode;
+    document.getElementById('modeRandom').classList.toggle('active', mode === 'random');
+    document.getElementById('modeCustom').classList.toggle('active', mode === 'custom');
+    document.getElementById('randomSection').style.display = mode === 'random' ? 'block' : 'none';
+    document.getElementById('questionListSection').style.display = mode === 'custom' ? 'block' : 'none';
+    if (mode === 'custom') refreshQuestionList();
+  }
+
+  // WHEN CHAPTER SELECTION CHANGES
+  function onChapterChange() {
+    if (currentMode === 'custom') refreshQuestionList();
+  }
+
+  // BUILD QUESTION LIST FOR CUSTOM MODE
+  function refreshQuestionList() {
+    var selectedChapters = getSelectedChapters();
+    var diff = document.querySelector('input[name="diff"]:checked').value;
+    var container = document.getElementById('questionList');
+    container.innerHTML = '';
+    selectedQuestions = {};
+    updateCount();
+
+    if (selectedChapters.length === 0) {
+      container.innerHTML = '<div style="color:#888; padding:10px; text-align:center;">Select chapters above first</div>';
+      return;
+    }
+
+    selectedChapters.forEach(function(chap) {
+      var questions = allData[chap] || [];
+      var filtered = questions.filter(function(q) {
+        return diff === 'all' || q.difficulty === diff;
+      });
+
+      if (filtered.length === 0) return;
+
+      // Chapter header with select all button
+      var header = document.createElement('div');
+      header.className = 'chapter-header';
+      header.innerHTML = '📖 ' + chap +
+        ' <button class="select-all-btn" onclick="selectAll(\\'' + chap + '\\')">Select All</button>';
+      container.appendChild(header);
+
+      filtered.forEach(function(q, i) {
+        var id = chap + '_' + q.index;
+        var item = document.createElement('div');
+        item.className = 'question-item';
+        item.onclick = function() {
+          var cb = this.querySelector('input[type=checkbox]');
+          cb.checked = !cb.checked;
+          toggleQuestion(id, chap, q, cb.checked);
+        };
+
+        var diffClass = 'diff-' + (q.difficulty || 'medium');
+        item.innerHTML =
+          '<input type="checkbox" id="cb_' + id + '" onclick="event.stopPropagation(); toggleQuestion(\\'' + id + '\\', \\'' + chap + '\\', null, this.checked)">' +
+          '<div>' +
+            '<div class="question-text">Q' + (i+1) + '. ' + q.question + '</div>' +
+            '<div class="question-meta">' +
+              '<span class="diff-tag ' + diffClass + '">' + (q.difficulty || 'medium') + '</span>' +
+              ' · ' + q.points + ' pt' +
+            '</div>' +
+          '</div>';
+
+        container.appendChild(item);
+
+        // Store question ref for toggleQuestion
+        item.querySelector('input').questionData = q;
+      });
+    });
+  }
+
+  function toggleQuestion(id, chap, q, checked) {
+    if (!q) {
+      // get from checkbox data
+      var cb = document.getElementById('cb_' + id);
+      q = cb ? cb.questionData : null;
+    }
+    if (checked && q) {
+      if (!selectedQuestions[id]) {
+        selectedQuestions[id] = { chapter: chap, ...q };
+      }
+    } else {
+      delete selectedQuestions[id];
+    }
+    // sync checkbox
+    var cb = document.getElementById('cb_' + id);
+    if (cb) cb.checked = checked;
+    updateCount();
+  }
+
+  function selectAll(chap) {
+    var diff = document.querySelector('input[name="diff"]:checked').value;
+    var questions = allData[chap] || [];
+    questions.filter(q => diff === 'all' || q.difficulty === diff).forEach(function(q) {
+      var id = chap + '_' + q.index;
+      selectedQuestions[id] = { chapter: chap, ...q };
+      var cb = document.getElementById('cb_' + id);
+      if (cb) { cb.checked = true; cb.questionData = q; }
+    });
+    updateCount();
+  }
+
+  function updateCount() {
+    var count = Object.keys(selectedQuestions).length;
+    document.getElementById('selectedCount').textContent = count + ' selected';
+  }
+
+  function getSelectedChapters() {
+    return Array.from(document.querySelectorAll('.chap-cb:checked')).map(cb => cb.value);
+  }
+
+  // CREATE QUIZ
+  function createQuiz() {
+    var chapters = getSelectedChapters();
+    if (chapters.length === 0) { showStatus('❌ Please select at least one chapter!', 'error'); return; }
+
+    var title = document.getElementById('quizTitle').value.trim() || 'ITI Quiz';
+    var teacher = document.getElementById('teacherName').value.trim() || 'Unknown';
+    var diff = document.querySelector('input[name="diff"]:checked').value;
+    var mode = currentMode;
+    var questions = [];
+
+    if (mode === 'custom') {
+      questions = Object.values(selectedQuestions);
+      if (questions.length === 0) { showStatus('❌ Please select at least one question!', 'error'); return; }
+    } else {
+      // collect all questions from selected chapters with filter
+      chapters.forEach(function(chap) {
+        var qs = (allData[chap] || []).filter(q => diff === 'all' || q.difficulty === diff);
+        qs.forEach(q => questions.push({ chapter: chap, ...q }));
+      });
+      questions = questions.sort(() => Math.random() - 0.5);
+      var limit = parseInt(document.getElementById('randomCount').value) || 0;
+      if (limit > 0) questions = questions.slice(0, limit);
+      if (questions.length === 0) { showStatus('❌ No questions found with these filters!', 'error'); return; }
+    }
+
+    showStatus('⏳ Creating your quiz... please wait...', 'loading');
+    document.getElementById('createBtn').disabled = true;
+
+    google.script.run
+      .withSuccessHandler(function(result) {
+        showStatus(
+          '✅ Quiz Created! ' + questions.length + ' questions\\n\\n' +
+          '🔗 Share link copied below — paste it for students!\\n\\n' +
+          result.shareUrl,
+          'success'
+        );
+        document.getElementById('createBtn').disabled = false;
+      })
+      .withFailureHandler(function(err) {
+        showStatus('❌ Error: ' + err.message, 'error');
+        document.getElementById('createBtn').disabled = false;
+      })
+      .createQuizFromSidebar({
+        title: title,
+        teacher: teacher,
+        chapters: chapters,
+        mode: mode,
+        difficulty: diff,
+        questions: questions
+      });
+  }
+
+  function showStatus(msg, type) {
+    var el = document.getElementById('status');
+    el.style.display = 'block';
+    el.className = 'status ' + type;
+    el.innerText = msg;
+    el.scrollIntoView({ behavior: 'smooth' });
+  }
+
+  // INIT
+  buildChapterList();
+  setMode('random');
+</script>
+</body>
+</html>`;
+}
+
+// ============================================
+// CALLED FROM SIDEBAR
+// ============================================
+
+function createQuizFromSidebar(params) {
+  var form = FormApp.create(params.title);
+  form.setIsQuiz(true);
+  form.setShuffleQuestions(false);
+
+  params.questions.forEach(function(q) {
+    var item = form.addMultipleChoiceItem();
+    item.setTitle(q.question);
+    item.setPoints(q.points || 1);
+
+    var choices = [q.optA, q.optB, q.optC, q.optD].map(function(opt, idx) {
+      var letter = ["A", "B", "C", "D"][idx];
+      return item.createChoice(opt.toString(), letter === q.answer);
+    });
+
+    item.setChoices(choices);
+    item.setRequired(true);
+  });
+
+  var result = {
+    shareUrl: form.getPublishedUrl(),
+    editUrl: form.getEditUrl()
+  };
+
+  logQuizCreation({
+    teacher: params.teacher,
+    title: params.title,
+    chapters: params.chapters.join(', '),
+    mode: params.mode === 'custom' ? 'Custom' : 'Random',
+    difficulty: params.difficulty,
+    questionCount: params.questions.length,
+    shareLink: result.shareUrl,
+    editLink: result.editUrl
+  });
+
+  return result;
+}
+
+// ============================================
+// LOG FUNCTIONS (same as before)
+// ============================================
+
+function setupLogSheet() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var logSheet = spreadsheet.getSheetByName('📋 QUIZ LOG');
+  if (!logSheet) logSheet = spreadsheet.insertSheet('📋 QUIZ LOG');
+
+  var headers = ['Date','Time','Teacher','Quiz Title','Chapters Used','Mode','Difficulty','No. of Questions','Share Link','Edit Link'];
+  logSheet.getRange(1,1,1,headers.length).setValues([headers]);
+
+  var headerRange = logSheet.getRange(1,1,1,headers.length);
+  headerRange.setBackground('#1a73e8');
+  headerRange.setFontColor('#ffffff');
+  headerRange.setFontWeight('bold');
+  logSheet.setFrozenRows(1);
+
+  [100,80,120,200,250,80,100,80,300,300].forEach((w,i) => logSheet.setColumnWidth(i+1, w));
+  SpreadsheetApp.getUi().alert('✅ Log sheet ready!');
+}
+
+function logQuizCreation(info) {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var logSheet = spreadsheet.getSheetByName('📋 QUIZ LOG');
+  if (!logSheet) { setupLogSheet(); logSheet = spreadsheet.getSheetByName('📋 QUIZ LOG'); }
+
+  var now = new Date();
+  logSheet.appendRow([
+    Utilities.formatDate(now, Session.getScriptTimeZone(), 'dd/MM/yyyy'),
+    Utilities.formatDate(now, Session.getScriptTimeZone(), 'HH:mm:ss'),
+    info.teacher, info.title, info.chapters, info.mode,
+    info.difficulty, info.questionCount, info.shareLink, info.editLink
+  ]);
+}
+
+function viewLog() {
+  var spreadsheet = SpreadsheetApp.getActiveSpreadsheet();
+  var logSheet = spreadsheet.getSheetByName('📋 QUIZ LOG');
+  if (!logSheet) { SpreadsheetApp.getUi().alert('No log found yet!'); return; }
+  spreadsheet.setActiveSheet(logSheet);
+}
